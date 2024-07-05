@@ -241,6 +241,7 @@ def main(yaml_path):
     current_date_str = datetime.now().strftime("%Y-%m-%d")
     tomorrow_date_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
+
     #yaml파일 정보 가져오기
     config = load_config(yaml_path)
 
@@ -252,56 +253,71 @@ def main(yaml_path):
     ORDER BY time ASC;
     """
 
-    data = {
-        'dates': query_db(config['db_path'], query('date')),
-        'times': query_db(config['db_path'], query('time')),
+    data2 = {
         'screens': query_db(config['db_path'], query('screen')),
-        'screen_names': query_db(config['db_path'], query('screen_name')),
-        'cams': query_db(config['db_path'], query('cam')),
-        'cam_names': query_db(config['db_path'], query('cam_name')),
-        'detection_types': query_db(config['db_path'], query('detection_type')),
-        'bf_image_names': query_db(config['db_path'], query('bf_image_name')),
-        'af_image_names': query_db(config['db_path'], query('af_image_name')),
-        'number_of_cams': query_db(config['db_path'], query('cam_count'))
     }
-    query = lambda field: f"""
-    SELECT {field}
-    FROM files
-    WHERE datetime(date || ' ' || time) >= '{current_date_str} {config['report_time_start']}'
-    AND datetime(date || ' ' || time) <= '{tomorrow_date_str} {config['report_time_end']}'
-    ORDER BY time ASC;
-    """
 
-    data = {
-        'dates': query_db(config['db_path'], query('date')),
-        'times': query_db(config['db_path'], query('time')),
-        'screens': query_db(config['db_path'], query('screen')),
-        'screen_names': query_db(config['db_path'], query('screen_name')),
-        'cams': query_db(config['db_path'], query('cam')),
-        'cam_names': query_db(config['db_path'], query('cam_name')),
-        'detection_types': query_db(config['db_path'], query('detection_type')),
-        'bf_image_names': query_db(config['db_path'], query('bf_image_name')),
-        'af_image_names': query_db(config['db_path'], query('af_image_name')),
-        'number_of_cams': query_db(config['db_path'], query('cam_count'))
-    }
     ##스크린수 알기
-    unique_screens = list(set(data['screens']))
-    #report 양식 가져오기
-    wb, result_path = prepare_excel_report(config, current_date_str, unique_screens)
+    unique_screens = list(set(data2['screens']))
+    # report 양식 가져오기
+    wb, result_path = prepare_excel_report(config, current_date_str,unique_screens)
     ws = wb['Report']
 
+    type_change_report_sendtime = datetime.strptime(config['report_sendtime'],"%H:%M").time()
 
-    #엑셀내용 입력
-    update_excel(ws, data, current_date_str,result_path)
+    # 현재 날짜를 기준으로 report_sendtime의 datetime 객체 생성
+    report_sendtime_datetime = datetime.combine(datetime.today(), type_change_report_sendtime)
 
-    bf_image_paths = [os.path.join(config['send_folder_path'], current_date_str, bf_image) for bf_image in data['bf_image_names']]
-    af_image_paths = [os.path.join(config['send_folder_path'], current_date_str, af_image) for af_image in data['af_image_names']]
+    # report_sendtime의 5분 후 시간을 계산
+    five_minutes_after_report_sendtime = report_sendtime_datetime + timedelta( minutes=5)
 
-    insert_images(ws, bf_image_paths, 'K', 8)
-    insert_images(ws, af_image_paths, 'L', 8)
+    # 현재 시간을 가져옴
+    now = datetime.now()
 
-    wb.save(result_path)
-    wb.close()
+    # 리포트 타임에서 5분사이에 현재시간이 있는 경우
+    if report_sendtime_datetime <= now < five_minutes_after_report_sendtime:
+        file_path = config['txt_file_path']
+        content = result_path
+        try:
+            with open(file_path, 'r') as file:
+                lines = [line.strip() for line in file.readlines()]
+                if content in lines:
+                    return "exist"
+        except FileNotFoundError:
+            lines = []
+
+        with open(file_path, 'a') as file:
+            file.write(content + '\n')
+            print(content)
+
+
+
+        data = {
+            'dates': query_db(config['db_path'], query('date')),
+            'times': query_db(config['db_path'], query('time')),
+            'screens': query_db(config['db_path'], query('screen')),
+            'screen_names': query_db(config['db_path'], query('screen_name')),
+            'cams': query_db(config['db_path'], query('cam')),
+            'cam_names': query_db(config['db_path'], query('cam_name')),
+            'detection_types': query_db(config['db_path'], query('detection_type')),
+            'bf_image_names': query_db(config['db_path'], query('bf_image_name')),
+            'af_image_names': query_db(config['db_path'], query('af_image_name')),
+            'number_of_cams': query_db(config['db_path'], query('cam_count'))
+        }
+
+
+
+        #엑셀내용 입력
+        update_excel(ws, data, current_date_str,result_path)
+
+        bf_image_paths = [os.path.join(config['send_folder_path'], current_date_str, bf_image) for bf_image in data['bf_image_names']]
+        af_image_paths = [os.path.join(config['send_folder_path'], current_date_str, af_image) for af_image in data['af_image_names']]
+
+        insert_images(ws, bf_image_paths, 'K', 8)
+        insert_images(ws, af_image_paths, 'L', 8)
+
+        wb.save(result_path)
+        wb.close()
 
 
 

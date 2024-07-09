@@ -115,14 +115,14 @@ def update_excel(ws, data, current_date_str,result_path):
             ws[f'J{index}'].value = part2  # J열에 괄호 안의 내용 할당
 
         ####### 내용 입력######################
-        base_styles = {col: ws[col + '9']._style for col in 'BCDEFGH'}
-        base_fonts = {col: copy(ws[col + '9'].font) for col in 'BCDEFGH'}
-        base_borders = {col: copy(ws[col + '9'].border) for col in 'BCDEFGH'}
-        base_fills = {col: copy(ws[col + '9'].fill) for col in 'BCDEFGH'}
-        base_number_formats = {col: copy(ws[col + '9'].number_format) for col in 'BCDEFGH'}
-        base_protections = {col: copy(ws[col + '9'].protection) for col in 'BCDEFGH'}
-        base_alignments = {col: copy(ws[col + '9'].alignment) for col in 'BCDEFGH'}
-        base_row_height = ws.row_dimensions[9].height
+        base_styles = {col: ws[col + '10']._style for col in 'BCDEFGH'}
+        base_fonts = {col: copy(ws[col + '10'].font) for col in 'BCDEFGH'}
+        base_borders = {col: copy(ws[col + '10'].border) for col in 'BCDEFGH'}
+        base_fills = {col: copy(ws[col + '10'].fill) for col in 'BCDEFGH'}
+        base_number_formats = {col: copy(ws[col + '10'].number_format) for col in 'BCDEFGH'}
+        base_protections = {col: copy(ws[col + '10'].protection) for col in 'BCDEFGH'}
+        base_alignments = {col: copy(ws[col + '10'].alignment) for col in 'BCDEFGH'}
+        base_row_height = ws.row_dimensions[10].height
 
         max_row = max((a.row for a in ws['B'] if a.value is not None))
         if max_row < 9:
@@ -174,7 +174,68 @@ def update_excel(ws, data, current_date_str,result_path):
                         cell.alignment = base_alignments[col]
 
                 ws.row_dimensions[max_row + 1].height = base_row_height
+    else:
+        #######모니터가 3개일때 내용 입력######################
+        base_styles = {col: ws[col + '10']._style for col in 'BCDEFGH'}
+        base_fonts = {col: copy(ws[col + '10'].font) for col in 'BCDEFGH'}
+        base_borders = {col: copy(ws[col + '10'].border) for col in 'BCDEFGH'}
+        base_fills = {col: copy(ws[col + '10'].fill) for col in 'BCDEFGH'}
+        base_number_formats = {col: copy(ws[col + '10'].number_format) for col in 'BCDEFGH'}
+        base_protections = {col: copy(ws[col + '10'].protection) for col in 'BCDEFGH'}
+        base_alignments = {col: copy(ws[col + '10'].alignment) for col in 'BCDEFGH'}
+        base_row_height = ws.row_dimensions[10].height
 
+
+        max_row = max((a.row for a in ws['B'] if a.value is not None))
+        if max_row < 10:
+            j = 10
+            for i in range(len(data['dates'])):
+                ws['B' + str(j)].value = '0' + str(i + 1)
+                ws['C' + str(j)].value = str(data['dates'][i]) + '\n' + str(data['times'][i])
+                ws['D' + str(j)].value = str(data['screens'][i])
+                ws['E' + str(j)].value = str(data['screen_names'][i])
+                ws['F' + str(j)].value = str(data['cams'][i])
+                ws['G' + str(j)].value = str(data['cam_names'][i])
+                ws['H' + str(j)].value = str(data['detection_types'][i])
+
+                for col in 'BCDEFGH':
+                    cell = ws[col + str(j)]
+                    if col in base_styles:
+                        cell._style = base_styles[col]
+                        cell.font = base_fonts[col]
+                        cell.border = base_borders[col]
+                        cell.fill = base_fills[col]
+                        cell.number_format = base_number_formats[col]
+                        cell.protection = base_protections[col]
+                        cell.alignment = base_alignments[col]
+
+                ws.row_dimensions[j].height = base_row_height
+                j += 1
+        else:
+            j = 10
+            z = max_row - 9
+            for i in range(z, len(data['dates'])):
+                max_row = max((a.row for a in ws['B'] if a.value is not None))
+                ws['B' + str(max_row + 1)].value = '0' + str(i + 1)
+                ws['C' + str(max_row + 1)].value = str(data['dates'][i]) + '\n' + str(data['times'][i])
+                ws['D' + str(max_row + 1)].value = str(data['screens'][i])
+                ws['E' + str(max_row + 1)].value = str(data['screen_names'][i])
+                ws['F' + str(max_row + 1)].value = str(data['cams'][i])
+                ws['G' + str(max_row + 1)].value = str(data['cam_names'][i])
+                ws['H' + str(max_row + 1)].value = str(data['detection_types'][i])
+
+                for col in 'BCDEFGH':
+                    cell = ws[col + str(max_row + 1)]
+                    if col in base_styles:
+                        cell._style = base_styles[col]
+                        cell.font = base_fonts[col]
+                        cell.border = base_borders[col]
+                        cell.fill = base_fills[col]
+                        cell.number_format = base_number_formats[col]
+                        cell.protection = base_protections[col]
+                        cell.alignment = base_alignments[col]
+
+                ws.row_dimensions[max_row + 1].height = base_row_height
 
 def insert_images(ws, image_paths, column, start_row):
     height_px = int((4.79 / 2.54) * 96)
@@ -183,23 +244,23 @@ def insert_images(ws, image_paths, column, start_row):
 
     # K8과 L8의 스타일을 저장
     if column == 'K':
-        base_style = ws['K8']._style
-        base_font = copy(ws['K8'].font)
-        base_border = copy(ws['K8'].border)
-        base_fill = copy(ws['K8'].fill)
-        base_number_format = copy(ws['K8'].number_format)
-        base_protection = copy(ws['K8'].protection)
-        base_alignment = copy(ws['K8'].alignment)
-        base_row_height = ws.row_dimensions[8].height
+        base_style = ws['K10']._style
+        base_font = copy(ws['K10'].font)
+        base_border = copy(ws['K10'].border)
+        base_fill = copy(ws['K10'].fill)
+        base_number_format = copy(ws['K10'].number_format)
+        base_protection = copy(ws['K10'].protection)
+        base_alignment = copy(ws['K10'].alignment)
+        base_row_height = ws.row_dimensions[10].height
     elif column == 'L':
-        base_style = ws['L8']._style
-        base_font = copy(ws['L8'].font)
-        base_border = copy(ws['L8'].border)
-        base_fill = copy(ws['L8'].fill)
-        base_number_format = copy(ws['L8'].number_format)
-        base_protection = copy(ws['L8'].protection)
-        base_alignment = copy(ws['L8'].alignment)
-        base_row_height = ws.row_dimensions[8].height
+        base_style = ws['L10']._style
+        base_font = copy(ws['L10'].font)
+        base_border = copy(ws['L10'].border)
+        base_fill = copy(ws['L10'].fill)
+        base_number_format = copy(ws['L10'].number_format)
+        base_protection = copy(ws['L10'].protection)
+        base_alignment = copy(ws['L10'].alignment)
+        base_row_height = ws.row_dimensions[10].height
 
     for path in image_paths:
         filename = os.path.basename(path)
@@ -287,7 +348,7 @@ def main(yaml_path):
             lines = []
 
         with open(file_path, 'a') as file:
-            file.write(content + '\n')
+            # file.write(content + '\n')
             print(content)
 
 
@@ -312,9 +373,12 @@ def main(yaml_path):
 
         bf_image_paths = [os.path.join(config['send_folder_path'], current_date_str, bf_image) for bf_image in data['bf_image_names']]
         af_image_paths = [os.path.join(config['send_folder_path'], current_date_str, af_image) for af_image in data['af_image_names']]
-
-        insert_images(ws, bf_image_paths, 'K', 8)
-        insert_images(ws, af_image_paths, 'L', 8)
+        if 'monitor3' not in result_path:
+            start_row = 9
+        else:
+            start_row = 10
+        insert_images(ws, bf_image_paths, 'K', start_row)
+        insert_images(ws, af_image_paths, 'L', start_row)
 
         wb.save(result_path)
         wb.close()

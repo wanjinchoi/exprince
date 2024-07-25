@@ -1,4 +1,5 @@
 import glob
+from openpyxl.styles import Font
 import os
 import openpyxl
 from datetime import datetime, timedelta
@@ -68,6 +69,10 @@ def prepare_excel_report(config, current_date_str, unique_screens):
     return wb, result_path
 
 def update_excel(ws, data, current_date_str,result_path):
+    red_font = Font(color="FF0000")
+
+
+
     if 'monitor3' not in result_path:
         ## 날짜 기입
         ws['L2'].value = current_date_str
@@ -115,6 +120,11 @@ def update_excel(ws, data, current_date_str,result_path):
             ws[f'J{index}'].value = part2  # J열에 괄호 안의 내용 할당
 
         ####### 내용 입력######################
+        base_fonts = {col: copy(ws[col + '10'].font) for col in 'BCDEFGHIJ'}
+        for font in base_fonts.values():
+            font.name = 'Arial'
+            font.size = 14
+
         base_styles = {col: ws[col + '10']._style for col in 'BCDEFGH'}
         base_fonts = {col: copy(ws[col + '10'].font) for col in 'BCDEFGH'}
         base_borders = {col: copy(ws[col + '10'].border) for col in 'BCDEFGH'}
@@ -147,6 +157,10 @@ def update_excel(ws, data, current_date_str,result_path):
                         cell.protection = base_protections[col]
                         cell.alignment = base_alignments[col]
 
+                if ws['H' + str(j)].value.lower() == 'fire':
+                    ws['H' + str(j)].value = 'Fire'
+                    ws['H' + str(j)].font = red_font
+
                 ws.row_dimensions[j].height = base_row_height
                 j += 1
         else:
@@ -172,6 +186,10 @@ def update_excel(ws, data, current_date_str,result_path):
                         cell.number_format = base_number_formats[col]
                         cell.protection = base_protections[col]
                         cell.alignment = base_alignments[col]
+                # H열의 글자가 fire이면 색깔을 빨간색으로 설정하고 글자를 Fire로 변경
+                if ws['H' + str(max_row + 1)].value.lower() == 'fire':
+                    ws['H' + str(max_row + 1)].value = 'Fire'
+                    ws['H' + str(max_row + 1)].font = red_font
 
                 ws.row_dimensions[max_row + 1].height = base_row_height
     else:
@@ -209,6 +227,10 @@ def update_excel(ws, data, current_date_str,result_path):
                         cell.protection = base_protections[col]
                         cell.alignment = base_alignments[col]
 
+                # H열의 글자가 fire이면 색깔을 빨간색으로 설정하고 글자를 Fire로 변경
+                if ws['H' + str(j)].value.lower() == 'fire':
+                    ws['H' + str(j)].value = 'Fire'
+
                 ws.row_dimensions[j].height = base_row_height
                 j += 1
         else:
@@ -234,6 +256,9 @@ def update_excel(ws, data, current_date_str,result_path):
                         cell.number_format = base_number_formats[col]
                         cell.protection = base_protections[col]
                         cell.alignment = base_alignments[col]
+                # H열의 글자가 fire이면 색깔을 빨간색으로 설정하고 글자를 Fire로 변경
+                if ws['H' + str(j)].value.lower() == 'fire':
+                    ws['H' + str(j)].value = 'Fire'
 
                 ws.row_dimensions[max_row + 1].height = base_row_height
 
@@ -281,18 +306,18 @@ def insert_images(ws, image_paths, column, start_row):
                         ws.add_image(img, cell_ref)
                         ws[f"{column}{row}"].comment = Comment(f"Image Inserted: {filename}", "System")
 
-                        # 스타일 적용
-                        for col in 'BCDEFGH':
-                            cell = ws[col + str(row)]
-                            cell._style = base_style
-                            cell.font = base_font
-                            cell.border = base_border
-                            cell.fill = base_fill
-                            cell.number_format = base_number_format
-                            cell.protection = base_protection
-                            cell.alignment = base_alignment
-
-                        ws.row_dimensions[row].height = base_row_height
+                        # # 스타일 적용
+                        # for col in 'BCDEFGH':
+                        #     cell = ws[col + str(row)]
+                        #     cell._style = base_style
+                        #     cell.font = base_font
+                        #     cell.border = base_border
+                        #     cell.fill = base_fill
+                        #     cell.number_format = base_number_format
+                        #     cell.protection = base_protection
+                        #     cell.alignment = base_alignment
+                        #
+                        # ws.row_dimensions[row].height = base_row_height
                     row += 1
         except Exception as e:
             print(f"Error processing image {path}: {e}")
@@ -348,7 +373,7 @@ def main(yaml_path):
             lines = []
 
         with open(file_path, 'a') as file:
-            # file.write(content + '\n')
+            file.write(content + '\n')
             print(content)
 
 
@@ -382,8 +407,9 @@ def main(yaml_path):
 
         wb.save(result_path)
         wb.close()
-
+    else:
+        print('리포트 전송시간이 아님')
 
 
 if __name__ == "__main__":
-    main(r'C:\work\baetenam\road.yaml')
+    main(r'C:\ArgosRpa\ARGOS.yaml')

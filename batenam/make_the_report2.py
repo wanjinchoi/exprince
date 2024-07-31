@@ -46,15 +46,11 @@ def query_db(db_path, query):
 
 def prepare_excel_report(config, current_date_str, unique_screens):
     current_datetime = datetime.now()
-    today_midnight = datetime.combine(current_datetime.date(),
-                                      datetime.min.time())
-    report_time_end = datetime.strptime(config['report_time_end'],
-                                        "%H:%M").time()
-    report_time_end_datetime = datetime.combine(
-        today_midnight + timedelta(days=1), report_time_end)
+    today_midnight = datetime.combine(current_datetime.date(),datetime.min.time())
+    report_time_end = datetime.strptime(config['report_time_end'],"%H:%M").time()
+    report_time_end_datetime = datetime.combine(today_midnight + timedelta(days=1), report_time_end)
 
-    yesterday_date = datetime.strptime(current_date_str,
-                                       "%Y-%m-%d") - timedelta(days=1)
+    yesterday_date = datetime.strptime(current_date_str,"%Y-%m-%d") - timedelta(days=1)
     yesterday_date_str = yesterday_date.strftime("%Y-%m-%d")
     yesterday_result_path = f"{config['report_path']}{yesterday_date_str}\\{yesterday_date_str}_ARGOS FS Report.xlsx"
     result_folder_path = os.path.join(config['report_path'], current_date_str)
@@ -388,15 +384,33 @@ def main(yaml_path):
 
     # yaml 파일 정보 가져오기
     config = load_config(yaml_path)
+    start_time = config['report_time_start']
+    end_time = config['report_time_end']
+    start_time = datetime.strptime(start_time, "%H:%M").time()
+    end_time = datetime.strptime(end_time, "%H:%M").time()
 
-    # 쿼리 수정: date와 time을 결합하여 정렬
-    query = lambda field: f"""
-    SELECT {field}
-    FROM files
-    WHERE datetime(date || ' ' || time) >= '{yesterday_date_str} {config['report_time_start']}'
-    AND datetime(date || ' ' || time) <= '{current_date_str} {config['report_time_end']}'
-    ORDER BY datetime(date || ' ' || time) ASC;
-    """
+    #하루
+    if start_time >= end_time:
+        # 쿼리 수정: date와 time을 결합하여 정렬
+        query = lambda field: f"""
+            SELECT {field}
+            FROM files
+            WHERE datetime(date || ' ' || time) >= '{yesterday_date_str} {config['report_time_start']}'
+            AND datetime(date || ' ' || time) <= '{current_date_str} {config['report_time_end']}'
+            ORDER BY datetime(date || ' ' || time) ASC;
+            """
+
+    ##당일
+    elif start_time < end_time:
+        query = lambda field: f"""
+            SELECT {field}
+            FROM files
+            WHERE datetime(date || ' ' || time) >= '{current_date_str} {config['report_time_start']}'
+            AND datetime(date || ' ' || time) <= '{current_date_str} {config['report_time_end']}'
+            ORDER BY datetime(date || ' ' || time) ASC;
+            """
+
+
 
     data2 = {
         'screens': query_db(config['db_path'], query('screen')),

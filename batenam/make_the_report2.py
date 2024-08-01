@@ -386,11 +386,21 @@ def main(yaml_path):
     config = load_config(yaml_path)
     start_time = config['report_time_start']
     end_time = config['report_time_end']
+    send_time = config['report_sendtime']
     start_time = datetime.strptime(start_time, "%H:%M").time()
     end_time = datetime.strptime(end_time, "%H:%M").time()
-
+    send_time= datetime.strptime(send_time, "%H:%M").time()
+    #리포트 받는 시간이 데이터 수집 시간보다 짧은경우 리포트 받는 시간에 맞춰서 데이터 조회
+    if send_time < end_time:
+        query = lambda field: f"""
+                   SELECT {field}
+                   FROM files
+                   WHERE datetime(date || ' ' || time) >= '{yesterday_date_str} {config['report_time_start']}'
+                   AND datetime(date || ' ' || time) <= '{current_date_str} {config['report_sendtime']}'
+                   ORDER BY datetime(date || ' ' || time) ASC;
+                   """
     #하루
-    if start_time >= end_time:
+    elif start_time >= end_time:
         # 쿼리 수정: date와 time을 결합하여 정렬
         query = lambda field: f"""
             SELECT {field}

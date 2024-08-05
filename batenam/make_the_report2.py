@@ -10,25 +10,23 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 from openpyxl.comments import Comment
 import yaml
 from copy import copy
-
+from openpyxl.styles import Alignment
 
 def load_config(yaml_path):
     # yaml 파일읽어서 경로랑 시간 가져오기
     with open(yaml_path, 'r', encoding='utf-8') as file:
         data = yaml.safe_load(file)
     return {
-        'form_path': os.path.normpath(
-            data['folder_path'] + '\\baetenam\\ARGOS FS Report.xlsx'),
-        'monitor3_form_path': os.path.normpath(
-            data['folder_path'] + '\\baetenam\\ARGOS FS Report_monitor3.xlsx'),
+        'form_path': os.path.normpath(data['folder_path'] + '\\baetenam\\ARGOS FS Report.xlsx'),
+        'monitor3_form_path': os.path.normpath(data['folder_path'] + '\\baetenam\\ARGOS FS Report_monitor3.xlsx'),
         'report_path': os.path.normpath(data['folder_path'] + '\\report\\'),
-        'send_folder_path': os.path.normpath(
-            data['folder_path'] + '\\send_screens\\'),
+        'send_folder_path': os.path.normpath(data['folder_path'] + '\\send_screens\\'),
         'db_path': os.path.normpath(data['db_path']),
         'report_time_start': data['report_time_start'],
         'report_time_end': data['report_time_end'],
         'report_sendtime': data['report_sendtime'],
-        'txt_file_path': data['txt_file_path']
+        'txt_file_path': data['txt_file_path'],
+        'master_ip': data['master_ip']
     }
 
 
@@ -81,12 +79,12 @@ def prepare_excel_report(config, current_date_str, unique_screens):
     return wb, result_path
 
 
-def update_excel(ws, data, current_date_str, result_path):
+def update_excel(ws, data, current_date_str, result_path, master_ip):
     red_font = Font(color="FF0000")
 
     if 'monitor3' not in result_path:
         ## 날짜 기입
-        ws['L2'].value = current_date_str
+        ws['k2'].value = current_date_str
         ## Total Detection Count
         ws['E5'].value = str(len(data['dates']))
         ## Number of Monitoring Cams
@@ -103,15 +101,15 @@ def update_excel(ws, data, current_date_str, result_path):
 
 
         ## human Detection
-        ws['I5'].value = human_count
+        ws['H5'].value = human_count
         ## Movement Detection
-        ws['L5'].value = movement_count
+        ws['K5'].value = movement_count
         ##Fire Detection
         ws['E6'].value = fire_count
         ## No signal/view angle Change Detection
-        ws['I6'].value = nosignl_count
+        ws['H6'].value = nosignl_count
         ## Discoloration Detection
-        ws['L6'].value = Discoloration_count
+        ws['K6'].value = Discoloration_count
 
 
         screen_cam_dict = defaultdict(list)
@@ -127,8 +125,8 @@ def update_excel(ws, data, current_date_str, result_path):
         for index, item in enumerate(x, start=3):  # 3행부터 시작
             part1 = item.split(' (')[0]  # 'SC01' 또는 'SC02' 추출
             part2 = item.split(' (')[1].rstrip(')')  # 괄호 안의 내용 추출
-            ws[f'I{index}'].value = part1  # I열에 'SC01', 'SC02' 할당
-            ws[f'J{index}'].value = part2  # J열에 괄호 안의 내용 할당
+            ws[f'H{index}'].value = part1  # I열에 'SC01', 'SC02' 할당
+            ws[f'I{index}'].value = part2  # J열에 괄호 안의 내용 할당
 
         ####### 내용 입력######################
         base_fonts = {col: copy(ws[col + '10'].font) for col in 'BCDEFGHIJ'}
@@ -152,15 +150,18 @@ def update_excel(ws, data, current_date_str, result_path):
                 ws['B' + str(j)].value = '0' + str(i + 1)
                 ws['C' + str(j)].value = str(data['dates'][i]) + '\n' + str(data['times'][i])
                 ws['D' + str(j)].value = str(data['screens'][i])
-                ws['E' + str(j)].value = str(data['screen_names'][i])
-                ws['F' + str(j)].value = str(data['cams'][i])
-                ws['G' + str(j)].value = str(data['cam_names'][i])
-                ws['H' + str(j)].value = str(data['detection_types'][i])
+                ws['E' + str(j)].value = str(data['cams'][i])
+                ws['F' + str(j)].value = str(data['cam_names'][i])
+                ws['G' + str(j)].value = str(data['detection_types'][i])
+                ws['I'+  str(j)].value = f'http://{master_ip}:8000/folders/{data["dates"][i]}/{data["screens"][i]}/{data["af_image_names"][i]}'
+                ws['I' + str(j)].hyperlink = f'http://{master_ip}:8000/folders/{data["dates"][i]}/{data["screens"][i]}/{data["af_image_names"][i]}'
+                ws['I' + str(j)].style = "Hyperlink"
+                ws['I' + str(j)].alignment = Alignment(horizontal='center')
 
                 # 이미지 파일 경로를 참조할 수 있도록 코멘트를 추가
                 date_time_str = f"{data['dates'][i].replace('-', '')}_{data['times'][i].replace(':', '')}"
                 screen_cam_str = f"{data['screens'][i]}_{data['cams'][i]}"
-                ws[f'K{j}'].comment = Comment(f"{date_time_str}_{screen_cam_str}", "System")
+                ws[f'J{j}'].comment = Comment(f"{date_time_str}_{screen_cam_str}", "System")
 
                 for col in 'BCDEFGH':
                     cell = ws[col + str(j)]
@@ -173,9 +174,9 @@ def update_excel(ws, data, current_date_str, result_path):
                         cell.protection = base_protections[col]
                         cell.alignment = base_alignments[col]
 
-                if ws['H' + str(j)].value.lower() == 'fire':
-                    ws['H' + str(j)].value = 'Fire'
-                    ws['H' + str(j)].font = red_font
+                if ws['G' + str(j)].value.lower() == 'fire':
+                    ws['G' + str(j)].value = 'Fire'
+                    ws['G' + str(j)].font = red_font
 
                 ws.row_dimensions[j].height = base_row_height
                 j += 1
@@ -187,15 +188,19 @@ def update_excel(ws, data, current_date_str, result_path):
                 ws['B' + str(max_row + 1)].value = '0' + str(i + 1)
                 ws['C' + str(max_row + 1)].value = str(data['dates'][i]) + '\n' + str(data['times'][i])
                 ws['D' + str(max_row + 1)].value = str(data['screens'][i])
-                ws['E' + str(max_row + 1)].value = str(data['screen_names'][i])
-                ws['F' + str(max_row + 1)].value = str(data['cams'][i])
-                ws['G' + str(max_row + 1)].value = str(data['cam_names'][i])
-                ws['H' + str(max_row + 1)].value = str(data['detection_types'][i])
+                ws['E' + str(max_row + 1)].value = str(data['cams'][i])
+                ws['F' + str(max_row + 1)].value = str(data['cam_names'][i])
+                ws['G' + str(max_row + 1)].value = str(data['detection_types'][i])
+                ws['I'+  str(j)].value = f'http://{master_ip}:8000/folders/{data["dates"][i]}/{data["screens"][i]}/{data["af_image_names"][i]}'
+                ws['I' + str(j)].hyperlink = f'http://{master_ip}:8000/folders/{data["dates"][i]}/{data["screens"][i]}/{data["af_image_names"][i]}'
+                ws['I' + str(j)].style = "Hyperlink"
+                ws['I' + str(j)].alignment = Alignment(horizontal='center')
+
 
                 # 이미지 파일 경로를 참조할 수 있도록 코멘트를 추가
                 date_time_str = f"{data['dates'][i].replace('-', '')}_{data['times'][i].replace(':', '')}"
                 screen_cam_str = f"{data['screens'][i]}_{data['cams'][i]}"
-                ws[f'K{max_row + 1}'].comment = Comment(f"{date_time_str}_{screen_cam_str}", "System")
+                ws[f'J{max_row + 1}'].comment = Comment(f"{date_time_str}_{screen_cam_str}", "System")
 
                 for col in 'BCDEFGH':
                     cell = ws[col + str(max_row + 1)]
@@ -208,9 +213,9 @@ def update_excel(ws, data, current_date_str, result_path):
                         cell.protection = base_protections[col]
                         cell.alignment = base_alignments[col]
                 # H열의 글자가 fire이면 색깔을 빨간색으로 설정하고 글자를 Fire로 변경
-                if ws['H' + str(max_row + 1)].value.lower() == 'fire':
-                    ws['H' + str(max_row + 1)].value = 'Fire'
-                    ws['H' + str(max_row + 1)].font = red_font
+                if ws['G' + str(max_row + 1)].value.lower() == 'fire':
+                    ws['G' + str(max_row + 1)].value = 'Fire'
+                    ws['G' + str(max_row + 1)].font = red_font
 
                 ws.row_dimensions[max_row + 1].height = base_row_height
     else:
@@ -232,15 +237,18 @@ def update_excel(ws, data, current_date_str, result_path):
                 ws['B' + str(j)].value = '0' + str(i + 1)
                 ws['C' + str(j)].value = str(data['dates'][i]) + '\n' + str(data['times'][i])
                 ws['D' + str(j)].value = str(data['screens'][i])
-                ws['E' + str(j)].value = str(data['screen_names'][i])
-                ws['F' + str(j)].value = str(data['cams'][i])
-                ws['G' + str(j)].value = str(data['cam_names'][i])
-                ws['H' + str(j)].value = str(data['detection_types'][i])
+                ws['E' + str(j)].value = str(data['cams'][i])
+                ws['F' + str(j)].value = str(data['cam_names'][i])
+                ws['G' + str(j)].value = str(data['detection_types'][i])
+                ws['I'+  str(j)].value = f'http://{master_ip}:8000/folders/{data["dates"][i]}/{data["screens"][i]}/{data["af_image_names"][i]}'
+                ws['I' + str(j)].hyperlink = f'http://{master_ip}:8000/folders/{data["dates"][i]}/{data["screens"][i]}/{data["af_image_names"][i]}'
+                ws['I' + str(j)].style = "Hyperlink"
+                ws['I' + str(j)].alignment = Alignment(horizontal='center')
 
                 # 이미지 파일 경로를 참조할 수 있도록 코멘트를 추가
                 date_time_str = f"{data['dates'][i].replace('-', '')}_{data['times'][i].replace(':', '')}"
                 screen_cam_str = f"{data['screens'][i]}_{data['cams'][i]}"
-                ws[f'K{j}'].comment = Comment(f"{date_time_str}_{screen_cam_str}", "System")
+                ws[f'J{j}'].comment = Comment(f"{date_time_str}_{screen_cam_str}", "System")
 
                 for col in 'BCDEFGH':
                     cell = ws[col + str(j)]
@@ -254,8 +262,8 @@ def update_excel(ws, data, current_date_str, result_path):
                         cell.alignment = base_alignments[col]
 
                 # H열의 글자가 fire이면 색깔을 빨간색으로 설정하고 글자를 Fire로 변경
-                if ws['H' + str(j)].value.lower() == 'fire':
-                    ws['H' + str(j)].value = 'Fire'
+                if ws['G' + str(j)].value.lower() == 'fire':
+                    ws['G' + str(j)].value = 'Fire'
 
                 ws.row_dimensions[j].height = base_row_height
                 j += 1
@@ -267,15 +275,18 @@ def update_excel(ws, data, current_date_str, result_path):
                 ws['B' + str(max_row + 1)].value = '0' + str(i + 1)
                 ws['C' + str(max_row + 1)].value = str(data['dates'][i]) + '\n' + str(data['times'][i])
                 ws['D' + str(max_row + 1)].value = str(data['screens'][i])
-                ws['E' + str(max_row + 1)].value = str(data['screen_names'][i])
-                ws['F' + str(max_row + 1)].value = str(data['cams'][i])
-                ws['G' + str(max_row + 1)].value = str(data['cam_names'][i])
-                ws['H' + str(max_row + 1)].value = str(data['detection_types'][i])
+                ws['E' + str(max_row + 1)].value = str(data['cams'][i])
+                ws['F' + str(max_row + 1)].value = str(data['cam_names'][i])
+                ws['G' + str(max_row + 1)].value = str(data['detection_types'][i])
+                ws['I'+  str(j)].value = f'http://{master_ip}:8000/folders/{data["dates"][i]}/{data["screens"][i]}/{data["af_image_names"][i]}'
+                ws['I' + str(j)].hyperlink = f'http://{master_ip}:8000/folders/{data["dates"][i]}/{data["screens"][i]}/{data["af_image_names"][i]}'
+                ws['I' + str(j)].style = "Hyperlink"
+                ws['I' + str(j)].alignment = Alignment(horizontal='center')
 
                 # 이미지 파일 경로를 참조할 수 있도록 코멘트를 추가
                 date_time_str = f"{data['dates'][i].replace('-', '')}_{data['times'][i].replace(':', '')}"
                 screen_cam_str = f"{data['screens'][i]}_{data['cams'][i]}"
-                ws[f'K{max_row + 1}'].comment = Comment(f"{date_time_str}_{screen_cam_str}", "System")
+                ws[f'J{max_row + 1}'].comment = Comment(f"{date_time_str}_{screen_cam_str}", "System")
 
                 for col in 'BCDEFGH':
                     cell = ws[col + str(max_row + 1)]
@@ -288,8 +299,8 @@ def update_excel(ws, data, current_date_str, result_path):
                         cell.protection = base_protections(col)
                         cell.alignment = base_alignments(col)
                 # H열의 글자가 fire이면 색깔을 빨간색으로 설정하고 글자를 Fire로 변경
-                if ws['H' + str(max_row + 1)].value.lower() == 'fire':
-                    ws['H' + str(max_row + 1)].value = 'Fire'
+                if ws['G' + str(max_row + 1)].value.lower() == 'fire':
+                    ws['G' + str(max_row + 1)].value = 'Fire'
 
                 ws.row_dimensions[max_row + 1].height = base_row_height
 
@@ -300,7 +311,16 @@ def insert_images(ws, column, start_row, send_folder_path):
     row = start_row
 
     # K10과 L10의 스타일을 저장
-    if column == 'K':
+    if column == 'J':
+        base_style = ws['J10']._style
+        base_font = copy(ws['J10'].font)
+        base_border = copy(ws['J10'].border)
+        base_fill = copy(ws['J10'].fill)
+        base_number_format = copy(ws['J10'].number_format)
+        base_protection = copy(ws['J10'].protection)
+        base_alignment = copy(ws['J10'].alignment)
+        base_row_height = ws.row_dimensions[10].height
+    elif column == 'K':
         base_style = ws['K10']._style
         base_font = copy(ws['K10'].font)
         base_border = copy(ws['K10'].border)
@@ -309,21 +329,12 @@ def insert_images(ws, column, start_row, send_folder_path):
         base_protection = copy(ws['K10'].protection)
         base_alignment = copy(ws['K10'].alignment)
         base_row_height = ws.row_dimensions[10].height
-    elif column == 'L':
-        base_style = ws['L10']._style
-        base_font = copy(ws['L10'].font)
-        base_border = copy(ws['L10'].border)
-        base_fill = copy(ws['L10'].fill)
-        base_number_format = copy(ws['L10'].number_format)
-        base_protection = copy(ws['L10'].protection)
-        base_alignment = copy(ws['L10'].alignment)
-        base_row_height = ws.row_dimensions[10].height
 
     max_row = ws.max_row
 
     while row <= max_row:
-        comment_K = ws[f"K{row}"].comment
-        comment_L = ws[f"L{row}"].comment
+        comment_K = ws[f"J{row}"].comment
+        comment_L = ws[f"K{row}"].comment
         bf_image_inserted = False
         af_image_inserted = False
 
@@ -348,9 +359,9 @@ def insert_images(ws, column, start_row, send_folder_path):
 
                         if os.path.exists(resized_path):
                             img = OpenpyxlImage(resized_path)
-                            cell_ref = f'K{row}'
+                            cell_ref = f'J{row}'
                             ws.add_image(img, cell_ref)
-                            ws[f"K{row}"].comment = Comment(f"Image Inserted: {os.path.basename(bf_image_path)}", "System")
+                            ws[f"J{row}"].comment = Comment(f"Image Inserted: {os.path.basename(bf_image_path)}", "System")
                             bf_image_inserted = True
                 except Exception as e:
                     print(f"Error processing image {bf_image_path}: {e}")
@@ -364,9 +375,9 @@ def insert_images(ws, column, start_row, send_folder_path):
 
                         if os.path.exists(resized_path):
                             img = OpenpyxlImage(resized_path)
-                            cell_ref = f'L{row}'
+                            cell_ref = f'K{row}'
                             ws.add_image(img, cell_ref)
-                            ws[f"L{row}"].comment = Comment(f"Image Inserted: {os.path.basename(af_image_path)}", "System")
+                            ws[f"K{row}"].comment = Comment(f"Image Inserted: {os.path.basename(af_image_path)}", "System")
                             af_image_inserted = True
                 except Exception as e:
                     print(f"Error processing image {af_image_path}: {e}")
@@ -472,16 +483,17 @@ def main(yaml_path):
             'number_of_cams': query_db(config['db_path'], query('cam_count'))
         }
 
+        master_ip = config['master_ip']
         # 엑셀내용 입력
-        update_excel(ws, data, current_date_str, result_path)
+        update_excel(ws, data, current_date_str, result_path, master_ip)
 
         if 'monitor3' not in result_path:
             start_row = 9
         else:
             start_row = 10
 
+        insert_images(ws, 'J', start_row, config['send_folder_path'])
         insert_images(ws, 'K', start_row, config['send_folder_path'])
-        insert_images(ws, 'L', start_row, config['send_folder_path'])
 
         wb.save(result_path)
         wb.close()

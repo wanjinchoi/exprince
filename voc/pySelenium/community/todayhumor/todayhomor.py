@@ -1,0 +1,572 @@
+"""
+====================================
+ :mod:`board/todayhomor`
+====================================
+.. moduleauthor:: Kyobong An <akb0930@argos-labs.com>
+.. note:: ARGOS-LABS License
+
+Description
+===========
+ARGOS LABS Rossum API unittest module
+"""
+# Authors
+# ===========
+#
+# * Ji YeonHee, Kybong An
+#
+# Change Log
+# --------
+#
+#  * [2022/03/28]
+#     - 포맷 적용 완료
+#  * [2022/01/06]
+#     - starting
+
+
+################################################################################
+import os
+import sys
+import yaml
+import json
+import time
+import shutil
+import random
+import tarfile
+import datetime
+import urllib.request
+import traceback
+from pathlib import Path
+from copy import deepcopy
+from alabs.common.util.vvlogger import get_logger
+from alabslib.selenium import PySelenium
+
+
+################################################################################
+
+class TODAYHOMORSearch(PySelenium):
+    # ==========================================================================
+    def __init__(self, config_f):
+        if not os.path.exists(config_f):
+            raise IOError(f'Cannot read config file "{config_f}"')
+        with open(config_f, encoding='utf-8') as ifp:
+            self.config = yaml.load(ifp, yaml.SafeLoader)
+        log_d = self.config['target']['log_folder']
+        if not os.path.exists(log_d):
+            os.makedirs(log_d)
+        logger = get_logger(self.get_safe_path(log_d, 'TODAYHOMORSearch.log'),
+                            logsize=1024 * 1024 * 10)
+        self.config['params']['kwargs']['logger'] = logger
+        PySelenium.__init__(self, **self.config['params']['kwargs'])
+
+        # 이미지 다운(403 에러 해결코드)
+        opener = urllib.request.build_opener()
+        opener.addheaders = [('User-Agent',
+                              'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1941.0 Safari/537.36')]
+        urllib.request.install_opener(opener)
+
+        # for output
+        start_ts = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        folder_name = "_".join(
+            [str(self.config['params']['site']['site_number']),
+             self.config['params']['site']['search'],
+             start_ts]
+        )
+        self.config['target']['folder'] += '/' + folder_name
+        self.is_done = False
+        self.cur_page = 0
+        out_config = deepcopy(self.config)
+        del out_config['params']['kwargs']['logger']
+        self.output = {
+            'start_ts': start_ts,
+            'config': out_config,
+            'article_list': [],
+            'latest_create_article_ts': None,
+            'cafe_info': {
+                'name': None,
+                'url': None,
+                'since': None,
+                'category': None,
+                'register_type': None,
+                'write_condition': None,
+                'num_members': None,
+                'num_visitors': None,
+            },
+            'app_info': {
+                'star_like': None,
+                'num_reviews': None,
+                'title': None,
+                'contents': None,
+                'version': None,
+                'num_download': None,
+            }
+        }
+        self.logger.info(f'Starting TODAYHOMOR Crawaling... with '
+                         f'config:\n{out_config}')
+
+    # ==========================================================================
+    def search(self):
+        # 검색어 입력
+        e = self.get_by_xpath('//form[@action="/board/list.php"]/input[2]')
+        self.send_keys(e, self.config['params']['site']['search'])
+
+        # 검색 단추
+        e = self.get_by_xpath('//form[@action="/board/list.php"]/input[3]',
+                              cond='element_to_be_clickable')
+        self.safe_click(e)
+        self.implicitly_wait(after_wait=1)
+
+    # ==========================================================================
+    def get_comment(self, msg):
+        try:
+
+            e = self.get_by_xpath('//div[@id="memoContainerDiv"]')
+            comments = e.find_elements_by_xpath('.//div[@class="memoContent"]')
+
+            parent_comment_id = ''
+            # 댓글이 없는 경우
+            if len(comments) == 0:
+                return
+            msg['comment_list'] = []
+            for i, cmt_e in enumerate(comments):
+                delay_c = random.uniform(
+                    self.config['params']['site']['delay']['comment']['min'],
+                    self.config['params']['site']['delay']['comment']['max'],
+                )
+                time.sleep(delay_c)
+                cmt = {
+                    'comment_id': None,
+                    'is_reply': None,
+                    'parent_comment_id': None,
+                    'create_ts': None,
+                    'nickname': None,
+                    'contents': None,
+                    'like': None,
+                    'dislike': None,
+                    'comment_img': [],
+                    'comment_img_url': [],
+                }
+                cmt_e = cmt_e.find_element_by_xpath('./..')
+                # 삭제 된 댓글은 예외처리
+                try:
+                    cmt_e.find_element_by_xpath('./div[@class="memoMedalDiv"]')
+                except:
+                    continue
+                # 댓글 id
+                cmt['comment_id'] = cmt_e.get_attribute('id').strip()
+
+                # 댓글 작성자
+                e = cmt_e.find_element_by_xpath('.//span[@class="memoName"]')
+                self.move_to_element(e)
+                cmt['nickname'] = e.text.strip()
+
+                self.move_to_element(e)
+                # 댓글 작성일시
+                e = cmt_e.find_element_by_xpath('.//span[@class="memoDate"]')
+                e_v = e.text.partition('(')[2].rpartition(')')[0]
+                cmt['create_ts'] = e_v.replace("-", ".")
+                # 댓글 공감수
+                try:
+                    e = cmt_e.find_element_by_xpath('.//span[@class="memoOkNok"]')
+                    cmt['like'] = int(e.text.partition('추천')[2].strip())
+                except:
+                    cmt['like'] = 0
+                # 댓글 내용
+                e = cmt_e.find_element_by_xpath('.//div[@class="memoContent"]')
+                cmt['contents'] = e.text.strip()
+                inner_html = e.get_attribute('innerHTML')
+                # 대댓글인지 확인
+                e = cmt_e.find_element_by_xpath('.//div[@class="memoContent"]/../..')
+                is_reply = e.get_attribute('class') == "memoWrapperDiv rereMemoWrapperDiv"
+                cmt['is_reply'] = is_reply
+                if not is_reply:
+                    parent_comment_id = cmt['comment_id']
+                    cmt['parent_comment_id'] = ""
+                else:
+                    cmt['parent_comment_id'] = parent_comment_id
+                # 삭제된 댓글
+
+                # 댓글 이미지
+                if inner_html.find('video') > 0:
+                    re_img = cmt_e.find_element_by_xpath('.//div[@class="memoContent"]/video')
+                    sub_e_url = re_img.get_attribute('poster')
+                    if self.config['params']['kwargs']['headless']:
+                        cmt_img_f = self.get_safe_path(self.config['target']['folder'], msg['article_id'],
+                                                       f'{cmt["comment_id"] + "_0"}.png')
+                        re_img.screenshot(cmt_img_f)
+                    cmt['comment_img'].append(f'{cmt["comment_id"] + "_0"}.png')
+                    cmt['comment_img_url'].append(sub_e_url)
+                elif inner_html.find('img') > 0:
+                    if inner_html.find('input type="button" value="이미지 보기"') > 0:
+                        e = cmt_e.find_element_by_xpath('.//input[@value="이미지 보기"]')
+                        self.safe_click(e)
+                        self.implicitly_wait(after_wait=1)
+                    re_img = cmt_e.find_element_by_xpath('.//div[@class="memoContent"]/img')
+                    if self.config['params']['kwargs']['headless']:
+                        cmt_img_f = self.get_safe_path(self.config['target']['folder'], msg['article_id'],
+                                                       f'{cmt["comment_id"] + "_0"}.png')
+                        re_img.screenshot(cmt_img_f)
+                    cmt['comment_img_url'].append(re_img.get_attribute('src'))  # src가 이미지 주소
+                    cmt['comment_img'].append(f'{cmt["comment_id"] + "_0"}.png')
+                # 댓글 목록에 추가
+                msg['comment_list'].append(cmt)
+                self.logger.info(f'   [{len(msg["comment_list"])}/{msg["num_comments"]}]: {cmt["comment_id"]}')
+        finally:
+            self.switch_to_window(1)
+
+    # ==========================================================================
+    def _screenshot(self, f):
+        S = lambda X: self.driver.execute_script('return document.body.parentNode.scroll' + X)
+        self.driver.set_window_size(S('Width'), S('Height'))  # May need manual adjustment
+        self.driver.find_element_by_tag_name('body').screenshot(f)
+
+    # ========================================================================
+    def get_article(self, msg, ndx):
+        try:
+            self.logger.info(f'Page[{self.cur_page}:{ndx}],article_id[{msg["article_id"]}],title="{msg["title"]}"')
+            # article 마다 delay.article.min ~ delay.article.max 사이에 멈춤
+            delay_a = random.uniform(
+                self.config['params']['site']['delay']['article']['min'],
+                self.config['params']['site']['delay']['article']['max'],
+            )
+            time.sleep(delay_a)
+            if self.config['params']['site']['capture_article']:
+                # save capture
+                # e_body = self.get_by_xpath('//body')
+                msg_capture_f = self.get_safe_path(self.config['target']['folder'], msg['article_id'],
+                                                   f'{msg["article_id"]}.png')
+                if self.config['params']['kwargs']['headless']:
+                    self._screenshot(msg_capture_f)
+                else:
+                    self.full_screenshot(msg_capture_f)
+
+            e_ab = self.get_by_xpath('//div[@class="writerInfoContents"]')
+            # 작성자
+            e = e_ab.find_element_by_xpath('./div/span/a/b')
+            msg['author'] = e.text.strip()
+            # 작성일시
+            e = e_ab.find_element_by_xpath('./div[7]')
+            msg['create_ts'] = e.text.partition('등록시간 :')[2].strip().replace("/", ".")
+            # 게시글 추천수
+            e = e_ab.find_element_by_xpath('./div[3]/span')
+            msg['like'] = int(e.text.strip())
+            # 조회수
+            e = e_ab.find_element_by_xpath('./div[4]')
+            msg['view_count'] = int(e.text.partition(':')[2].strip())
+            # 게시글에 달린 댓글 수
+            e = e_ab.find_element_by_xpath('./div[6]')
+            v = e.text.partition('개')[0].partition(': ')[2]
+            msg['num_comments'] = int(v)
+            # 게시글 내용
+            e = self.get_by_xpath('.//div[@class="viewContent"]')
+            msg['contents'] = e.text.strip()
+
+            # 아래의 이미지나 링크는 없는 경우도 많은데 이런 경우 find_elements_by_xpath 하기 전에
+            # 미리 HTML에서 해당 class를 찾는게 시간이 훨씬 적게 걸림
+            inner_html = e.get_attribute('innerHTML')
+            # 이미지 주소 가져오기
+            if inner_html.find('img') > 0:
+                for j, sub_e in enumerate(e.find_elements_by_tag_name('img')):
+                    sub_e_url = sub_e.get_attribute('src')
+                    if self.config['params']['kwargs']['headless']:
+                        cmt_img_f = self.get_safe_path(self.config['target']['folder'], msg['article_id'],
+                                                       f'{j}.png')
+                        sub_e.screenshot(cmt_img_f)
+                    else:
+                        msg['image_url_list'].append(sub_e_url)
+
+            self.get_comment(msg)
+
+        except Exception as err:
+            raise
+        finally:
+            # 이전 페이지
+            self.driver.back()
+            try:
+                self.switch_to_window(0)
+            except:
+                # selenium.common.exceptions.WebDriverException: Message: unknown error:
+                # cannot determine loading status
+                pass
+
+        # ==========================================================================
+
+    def stop_article_older_than(self, msg):
+        try:
+            # '2021.12.21. 21:48:00'
+            create_ts = datetime.datetime.strptime(msg['create_ts'], '%Y.%m.%d %H:%M:%S')
+            old_ts = datetime.datetime.strptime(
+                self.config['params']['site']['stop_article_older_than']['datetime'],
+                self.config['params']['site']['stop_article_older_than']['format']
+            )
+            if create_ts < old_ts:
+                self.logger.error(f'Stop crawling because article create_ts "{create_ts}" '
+                                  f'is older than "{old_ts}"')
+                return True
+            return False
+        except Exception as err:
+            return False
+
+        # ==========================================================================
+    def get_page(self):
+        try:
+            self.cur_page += 1
+            # "카페 메인 (cafe_main)" iFrame으로 이동
+            self.switch_to_window(1)
+            # 페이지 테이블 구해오기
+            e = self.get_by_xpath('//div[@class="table_container"]')
+            es = e.find_elements_by_xpath('.//td[@class="subject"]')
+
+            # 한번 게시a9556글로 갔다가 되돌아 오면 다음의 tr 태그가 attach 안되어 있다고 나와서
+            # 매번 다시 구하도록 함
+            for i, ea in enumerate(es):
+                msg = {
+                    'page': self.cur_page,
+                    'row': i + 1,
+                    'user_type': self.config['params']['site']['user_type'],
+                    'site': self.config['params']['site']['site'],
+                    'site_name': self.config['params']['site']['site_name'],
+                    # 'site_board': self.config['params']['site']['site_board'],
+                    'channel': self.config['params']['site']['channel'],
+                    'search_type': self.config['params']['site']['search_type'],
+                    'service': self.config['params']['site']['service'],
+                    'article_id': None,
+                    'create_ts': None,
+                    'board_name': None,
+                    'title': None,
+                    'contents': None,
+                    'author': None,
+                    'view_count': None,
+                    'good': None,
+                    'great': None,
+                    'sad': None,
+                    'angry': None,
+                    'news': None,
+                    'like': None,
+                    'dislike': None,
+                    'star_like': None,
+                    'num_comments': None,
+                    'article_url': None,
+                    'image_list': [],
+                    'image_url_list': [],
+                    'attachment_name': [],
+                    'attachment_url': [],
+                    'comment_list': [
+                        {
+                            'comment_id': None,
+                            'is_reply': None,
+                            'parent_comment_id': None,
+                            'create_ts': None,
+                            'nickname': None,
+                            'contents': None,
+                            'like': None,
+                            'dislike': None,
+                            'comment_img': [],
+                            'comment_img_url': [],
+                        }
+                    ],
+                }
+                try:
+                    e = self.get_by_xpath('//div[@class="table_container"]')
+                    es = e.find_elements_by_xpath('.//td[@class="subject"]')
+                    ea = es[i]
+
+                    # 1) 게시글id : article_id
+                    e_url = ea.find_element_by_xpath('./a')
+                    a_url = e_url.get_attribute('href')
+                    v = ea.find_element_by_xpath('./..').find_element_by_xpath('.//td[@class="no"]').text
+                    id = v
+                    msg['article_id'] = id
+                    # 2) 게시글 주소: article_url
+                    msg['article_url'] = a_url
+                    # 3) 제목: title
+                    e = e_url
+                    msg['title'] = e.text.strip()
+
+                    self.safe_click(e_url)
+                    self.implicitly_wait(after_wait=1)
+                    self.get_article(msg, i + 1)
+                except Exception as err:
+                    if msg['article_id'] is None:
+                        self.logger.error(f'Cannot find Result!')
+                        self.is_done = True
+                        break
+                    _exc_info = sys.exc_info()
+                    _out = traceback.format_exception(*_exc_info)
+                    del _exc_info
+                    msg['error_backtrace'] = "".join(_out)
+                    self.logger.error(f'get_page[{self.cur_page}:{i + 1}]:{msg["error_backtrace"]}')
+                    self.logger.error(str(err))
+
+                if self.stop_article_older_than(msg):
+                    if os.path.isdir("/".join([self.config['target']['folder'], msg['article_id']])):
+                        shutil.rmtree("/".join([self.config['target']['folder'], msg['article_id']]))
+                    self.is_done = True  # 동시성 런타임
+                    break
+                if not self.config['params']['kwargs']['headless']:
+                    self.save_image(msg)
+                # self.save_video(msg)
+                self.output['article_list'].append(msg)
+                if self.config['target']['is_separate_article']:
+                    self.save_article(msg)
+                # 첫번째로 크롤링한 게시글의 작성시간을 저장
+                if self.output["latest_create_article_ts"] is None:
+                    self.output["latest_create_article_ts"] = msg['create_ts']
+                if len(self.output['article_list']) >= \
+                        self.config['params']['site']['max_articles'] > 0:
+                    self.is_done = True
+                    break
+        except Exception as err:
+            raise
+        finally:
+            self.switch_from_iframe()
+
+        # ==========================================================================
+
+    def next_page(self):
+        e = None
+        try:
+            self.switch_to_window(0)
+            ple = self.get_by_xpath('//td[@style="padding:20px 0 5px 0;text-align:center"]')
+            self.move_to_element(ple)
+            e = ple.find_element_by_xpath('.//img[@style="width:73px;height:19px;margin-left:10px"]')
+            self.safe_click(e)
+        except Exception as err:
+            if e is None:
+                self.logger.error(f'Cannot find Result!')
+                self.is_done = True
+                return
+            raise
+        finally:
+            self.switch_from_iframe()
+
+    # ==========================================================================
+    def make_tgz(self):
+        src_d = self.config['target']['folder']
+        tgz_f = self.config['target']['folder'] + '.tgz'
+        with tarfile.open(tgz_f, "w:gz") as tar:
+            tar.add(src_d, arcname=os.path.basename(src_d))
+
+    # ==========================================================================
+    def save_d(self, fn, d):
+        fn += '.yaml' if self.config['target']['is_yaml'] else '.json'
+        with open(fn, 'w', encoding='utf-8') as ofp:
+            if self.config['target']['is_yaml']:
+                yaml.dump(d, ofp, allow_unicode=True)
+            else:
+                ofp.write(json.dumps(d, ensure_ascii=False))
+
+    # ==========================================================================
+    def save_image(self, article):
+        # 게시글 이미지
+        for j, sub_e_url in enumerate(article['image_url_list']):
+            try:
+                article_img_p = self.get_safe_path(
+                    self.config['target']['folder'],
+                    article['article_id'],
+                    f'{j}.png'
+                )
+                # 가끔 에러 나는 경우가 있슴
+                for count in range(10):
+                    try:
+                        urllib.request.urlretrieve(sub_e_url, article_img_p)
+                        article['image_list'].append(f'{j}.png')
+                        break
+                    except:
+                        self.logger.info(f'save_img: {j}.png : retry{count}')
+                        continue
+            except Exception as err:
+                self.logger.error(f'save_img: {j, sub_e_url}: {str(err)}')
+
+        # 댓글 이미지
+        for cmt in article['comment_list']:
+            if not('comment_img' in cmt and cmt['comment_img']):
+                continue
+            for k, cmt_url in enumerate(cmt['comment_img_url']):
+                try:
+                    if cmt_url.find('mp4') > 0:
+                        cmt_img_f = self.get_safe_path(
+                            self.config['target']['folder'],
+                            article['article_id'],
+                            f'{cmt["comment_id"] + "_" + str(k)}.mp4'
+                        )
+                        urllib.request.urlretrieve(cmt_url, cmt_img_f)
+                    else:
+                        cmt_img_f = self.get_safe_path(
+                            self.config['target']['folder'],
+                            article['article_id'],
+                            f'{cmt["comment_id"] + "_" + str(k)}.png'
+                        )
+                        urllib.request.urlretrieve(cmt_url, cmt_img_f)
+                except Exception as err:
+                    self.logger.error(f'save_img: {cmt["comment_id"], cmt["comment_img_url"]}: {str(err)}')
+
+    # ==========================================================================
+    def save_article(self, article):
+        at_js_f = self.get_safe_path(
+            self.config['target']['folder'],
+            article['article_id'],
+            article['article_id'],
+        )
+        self.save_d(at_js_f, article)
+
+    # ==========================================================================
+    def save(self):
+        self.output['num_articles'] = len(self.output['article_list'])
+        if self.config['target']['is_separate_article']:
+            del self.output['article_list']
+        js_f = self.get_safe_path(
+            self.config['target']['folder'],
+            f'{self.output["start_ts"]}'
+        )
+        self.save_d(js_f, self.output)
+        if self.config['target']['is_tar_gz']:
+            self.make_tgz()
+
+    # ==========================================================================
+    def clean(self):
+        for path in Path(self.config['target']['folder']).rglob('*.*'):
+            cts_ut = os.path.getctime(str(path))
+            cts = datetime.datetime.fromtimestamp(cts_ut)
+            diff_t = datetime.datetime.now() - cts
+            if diff_t.days >= self.config['target']['keep_day']:
+                os.remove(str(path))
+
+    # ==========================================================================
+    def start(self):
+        try:
+            if self.config['target']['is_clear'] and \
+                    os.path.exists(self.config['target']['folder']):
+                shutil.rmtree(self.config['target']['folder'])
+            self.search()
+            while not self.is_done:
+                self.get_page()
+                if self.is_done:
+                    break
+                self.next_page()
+            return 0
+        except Exception as e:
+            _exc_info = sys.exc_info()
+            _out = traceback.format_exception(*_exc_info)
+            del _exc_info
+            self.logger.error(''.join(_out))
+            self.logger.error(str(e))
+            return 9
+        finally:
+            print(self.output["latest_create_article_ts"])
+            print(self.config['target']['folder'])
+            self.output['end_ts'] = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+            if self.config['target']['is_save']:
+                self.save()
+            self.clean()
+
+
+################################################################################
+def do_start(**kwargs):
+    with TODAYHOMORSearch(kwargs['config_f']) as ws:
+        ws.start()
+
+
+################################################################################
+if __name__ == '__main__':
+    _config_f = 'todayhomor.yaml'
+    do_start(config_f=_config_f)

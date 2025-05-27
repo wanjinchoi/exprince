@@ -6,6 +6,7 @@ import glob
 import imageio.v2
 import shutil
 from openpyxl.styles import Alignment
+import yaml
 
 def main(checklist):
     current_date_str = datetime.now().strftime("%Y-%m-%d")
@@ -15,12 +16,20 @@ def main(checklist):
 
     one_week_ago = datetime.now() - timedelta(days=7)
     one_week_ago_str = one_week_ago.strftime("%Y-%m-%d")
-    result_folder_path = 'Z:\\viet\\report\\' + current_date_str+'\\'
-    image_folder_path = 'Z:\\viet\\all_images\\'+ current_date_str+'\\'
-    one_week_agof_path = 'Z:\\viet\\all_images\\' + one_week_ago_str + '\\'
+
+    with open('road.yaml', 'r') as file:
+        data = yaml.safe_load(file)
+        report_path = os.path.normpath(data['report_path'])
+        all_image_path = os.path.normpath(data['all_image_path'])
+        gifolder_path = os.path.normpath(data['gifolder_path'])
+
+
+    result_folder_path = report_path + current_date_str+'\\'
+    image_folder_path = all_image_path+ current_date_str+'\\'
+    one_week_agof_path = all_image_path + one_week_ago_str + '\\'
     store_xlsx_path = result_folder_path + current_date_str + '_ARGOS C-CUBE Report_v1.0.xlsx'
-    git_folder_path = 'Z:\\viet\\gif_folder\\' + current_date_str
-    y_gif_folder_path='Z:\\viet\\gif_folder\\' + yesterday_date_str
+    git_folder_path = gifolder_path + current_date_str
+    y_gif_folder_path= gifolder_path + yesterday_date_str
 
     wb = op.load_workbook(store_xlsx_path)
     ws = wb['Report']
@@ -72,7 +81,7 @@ def main(checklist):
 
         if len(filtered_files) > 0:
             # if i == 32 or i == 8:
-            #     print(f"make : {i}번째 {filtered_files}")
+            #r     print(f"make : {i}번째 {filtered_files}")
             x = r_detect_time.split(':')
             new_name = x[0] + '_' + x[1] + '_' + x[2] + '_' + screen + '_' + cam_name + '.gif'
             gif_file = os.path.join(git_folder_path, new_name)

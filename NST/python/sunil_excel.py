@@ -164,7 +164,7 @@ def main(checklist):
         grouped_data = df_result[['제품코드', '업체 로트 번호', 'NST LOT No.']]
     else:
         # '업체 로트 번호'가 없을 경우 처리
-        grouped_data = df_result[['전 Lot 정보 - 품번']]
+        grouped_data = df_result[['제품코드']]
 
     #식별표 서식에 데이터 넣기
     for index, row in grouped_data.iterrows():
@@ -258,7 +258,7 @@ def main(checklist):
     end_dir = r'C:\work\NST\선일\endfile'
     shutil.move(data_file, os.path.join(end_dir, os.path.basename(data_file)))
     #프린트
-    #file_print(folder_path)
+    file_print(folder_path)
     # #양식에 해당 내용넣기
     append_to_excel(data_list, grouped_data)
     #폴더삭제

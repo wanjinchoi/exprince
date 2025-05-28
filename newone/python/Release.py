@@ -86,8 +86,6 @@ class Release(PySelenium):
         # yaml 파일 로드
         with open(config_l, encoding='utf-8') as ifp:
             self.config = yaml.load(ifp, yaml.SafeLoader)
-
-        self.add_argumnet('--xc','-ar-')
         # 초기화 코드 작성
         # self.com_code = com_code
         # self.user_id = user_id
@@ -707,7 +705,6 @@ class Release(PySelenium):
             self.logger.info('release-1')
             print(err)
             return 1
-
 
 
 # ==============================================

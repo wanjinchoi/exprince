@@ -1,13 +1,16 @@
-import os
+import re
 
-def main(checklist):
-    test = checklist
-    if test:
-        print('A','B')
-    else:
-        print('C',"D")
-if __name__ == "__main__":
-    main('aa')
+text = """
+6월 23일 17시에 가장 가까운 수서에서 부산 가는 SRT 열차는 다음과 같습니다:
 
+*   **SRT 357**
+    *   **수서 출발:** 17:05
+    *   **부산 도착:** 19:30
+"""
 
-print(main(r'{checklist}'))
+# '출발:' 다음에 오는 시간 추출 (출발: 포함하되, 숫자만 추출)
+match = re.search(r"출발:\*\*\s*(\d{1,2}:\d{2})", text)
+if match:
+    print(match.group(1))  # ✅ 출력: 17:05
+else:
+    print("시간 추출 실패")

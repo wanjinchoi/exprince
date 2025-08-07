@@ -223,7 +223,7 @@ def main():
     driver = open_driver()
     try:
         while True:
-            search_and_book(driver, dep, arr, date, time_slot, target_arrival_time,login_id, login_pw)
+            search_and_book(driver, dep, arr, date, time_slot, target_arrival_time, login_id, login_pw)
             time.sleep(30)
     finally:
         driver.quit()

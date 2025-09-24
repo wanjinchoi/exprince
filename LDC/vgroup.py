@@ -241,6 +241,19 @@ def main(subject,vcom,excelpath):
             else:
                 break
 
+    ## 엑셀파일 열어서
+    wb_re = openpyxl.load_workbook(result_path)
+    ws_re = wb_re.active
+
+    # 모든 셀 순회하면서 값 치환
+    for row in ws_re.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str) and "°C" in cell.value:
+                cell.value = cell.value.replace("°C", "'C")
+
+    # 저장
+    wb_re.save(result_path)
+    wb_re.close()
 
 if __name__ == "__main__":
     main('aa','bb',r'C:\work\LDC\excel')
